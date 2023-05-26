@@ -1,4 +1,3 @@
-
 //////////////////////
 /* GLOBAL VARIABLES */
 //////////////////////
@@ -11,8 +10,18 @@ var chest, back, torso;
 var armL, armR, forearmL, forearmR, pipeL, pipeR, leftArm, rightArm;
 var hips, thighL, thighR, ankleL, ankleR, footL, footR, wheel1L, wheel2L, wheel3L, wheel1R, wheel2R, wheel3R, legs, feet;
 
-var movementSpeed = 0.5;
-var rotationSpeed = 0.1;
+var truckAABBmax = new THREE.Vector3(12, 8.25, 4.5);
+var truckAABBmin = new THREE.Vector3(-12, -12, -34.5);
+
+var towAABBmax = new THREE.Vector3(12, 15, -42.5);
+var towAABBmin = new THREE.Vector3(-12, -12, -94.25);
+
+var towPos = new THREE.Vector3(0,5.25,-46.5) // posicao correta do reboque
+
+// towAABBmax e min respetivos para quando reboque ta na posicao = (12, 15, -22.5) e (-12, -12, -74.25)
+
+var movementSpeed = 30;
+var rotationSpeed = 5;
 var maxLowerRotationAngle = Math.PI/2;
 var minLowerRotationAngle = 0;
 var maxHeadRotationAngle = Math.PI;
@@ -21,18 +30,28 @@ var maxLeftArmPosition = 11.25
 var minLeftArmPosition = 6.75;
 var maxRightArmPosition = -11.25
 var minRightArmPosition = -6.75;
+var viewSize = 50;
 
-var isTruck = 0;
+var isTruck = false;
+var isCollidingThisFrame = false;
+var wasCollidingLastFrame = false;
+var animating = false; //ja houve animacao? inicia a false
+var inPlace = false;
+
+const clock = new THREE.Clock();
 
 var materials = {
     black: new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: false }),
-    red: new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: false }),
-    white: new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: false }),
+    red: new THREE.MeshBasicMaterial({ color: 0xeb001f, wireframe: false }),
+    darkRed: new THREE.MeshBasicMaterial({ color: 0x8f0a1c, wireframe: false }),
+    lightGray: new THREE.MeshBasicMaterial({ color: 0xeeeeee, wireframe: false }),
+    gray: new THREE.MeshBasicMaterial({ color: 0xcccccc, wireframe:false}),
+    blue: new THREE.MeshBasicMaterial({ color: 0x001170, wireframe:false})
 }
 
 var keys = Array(256).fill(0);
 
-var geomWheel = new THREE.CylinderGeometry(3.75, 3.75, 3);
+var geomWheel = new THREE.CylinderGeometry(3.75, 3.75, 3, 64);
 var geomThigh = new THREE.BoxGeometry(7.5, 6, 3);
 var geomAnkle = new THREE.BoxGeometry(7.5, 9, 3);
 var geomFoot = new THREE.BoxGeometry(7.5, 3, 9);
@@ -53,13 +72,13 @@ function createScene(){
 
 
     scene.add(new THREE.AxisHelper(10));
-    //createCorpo();
     createTow();
     createHead();
     createLeftArm();
     createRightArm();
     createTorso();
-    createLegs();   
+    createLegs();  
+    // initAABB(); 
 }
 
 //////////////////////
@@ -108,28 +127,28 @@ function createWheel(x,y,z){
 
 function createThigh(x,y,z){
     'use strict';
-    thigh = new THREE.Mesh(geomThigh, materials.white);
+    thigh = new THREE.Mesh(geomThigh, materials.lightGray);
     thigh.position.set(x,y,z);
     return thigh;
 }
 
 function createAnkle(x,y,z){
     'use strict';
-    ankle = new THREE.Mesh(geomAnkle, materials.white);
+    ankle = new THREE.Mesh(geomAnkle, materials.blue);
     ankle.position.set(x,y,z);
     return ankle;
 }
 
 function createEye(x,y,z){
     'use strict';
-    eye = new THREE.Mesh(geomEye, materials.white);
+    eye = new THREE.Mesh(geomEye, materials.red);
     eye.position.set(x,y,z);
     return eye;
 }
 
 function createEar(x,y,z){
-    'use strict'
-    ear = new THREE.Mesh(geomEar, materials.white);
+    'use strict';
+    ear = new THREE.Mesh(geomEar, materials.blue);
     ear.position.set(x,y,z);
     return ear;
 }
@@ -150,16 +169,16 @@ function createTorso(){
 function createHead(){
     'use strict';
 
-    skull = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 3), materials.white);
-    mouth = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.5), materials.white);
-    eyeL = createEye(1.5, 1.5, 1.5);
-    eyeR = createEye(-1.5, 1.5, 1.5);
-    earL = createEar(2.25, 3.75, 0);
-    earR = createEar(-2.25, 3.75, 0);    
-    skull.position.set(0, 1.5, 0);
-    mouth.position.set(0, 0.75, 1.5);
+    skull = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 3), materials.blue);
+    mouth = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.5), materials.lightGray);
+    eyeL = createEye(1.5, 1.6, 1.5);
+    eyeR = createEye(-1.5, 1.6, 1.5);
+    earL = createEar(2.25, 3.76, 0);
+    earR = createEar(-2.25, 3.76, 0);    
+    skull.position.set(0, 1.6, 0);
+    mouth.position.set(0, 0.76, 1.5);
     head = new THREE.Object3D();
-    head.position.set(0,6,0);
+    head.position.set(0,5.99,0);
     head.add(skull);
     head.add(eyeL);
     head.add(eyeR);
@@ -171,7 +190,7 @@ function createHead(){
 
 function createFoot(x,y,z){
     'use strict';
-    foot = new THREE.Mesh(geomFoot, materials.white);
+    foot = new THREE.Mesh(geomFoot, materials.blue);
     foot.position.set(x,y,z);
     return foot;
 }
@@ -187,10 +206,6 @@ function createFeet(){
     return feet;
 }
 
-function createArm(){
-    'use strict';
-}
-
 function createLegs(){
     'use strict';
 
@@ -200,7 +215,7 @@ function createLegs(){
     wheel1R = createWheel( -10.5, -3, 3);
     wheel2R = createWheel( -10.5, -13.5, 3);
     wheel3R = createWheel( -10.5, -21, 3);
-    hips = new THREE.Mesh(new THREE.BoxGeometry(18, 9, 4.5), materials.white);
+    hips = new THREE.Mesh(new THREE.BoxGeometry(18, 9, 4.5), materials.red);
     hips.position.set(0,-5.27,-1.5);
     thighL = createThigh(5.25, -9.75, 2.25);
     thighR = createThigh(-5.25, -9.75, 2.25);
@@ -227,9 +242,9 @@ function createLegs(){
 function createLeftArm(){
     'use strict';
 
-    armL = new THREE.Mesh(new THREE.BoxGeometry(4.5, 9, 4.5), materials.white);
-    forearmL = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3, 9), materials.white);
-    pipeL = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 6));
+    armL = new THREE.Mesh(new THREE.BoxGeometry(4.5, 9, 4.5), materials.darkRed);
+    forearmL = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3, 9), materials.darkRed);
+    pipeL = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 6), materials.lightGray);
     pipeL.rotateZ(Math.PI / -4);
     armL.position.set(0, 1.5, -2.25);
     forearmL.position.set(0,-4.5,0);
@@ -245,9 +260,9 @@ function createLeftArm(){
 function createRightArm(){
     'use strict';
 
-    armR = new THREE.Mesh(new THREE.BoxGeometry(-4.5, 9, 4.5), materials.white);
-    forearmR = new THREE.Mesh(new THREE.BoxGeometry(-4.5, 3, 9), materials.white);
-    pipeR = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 6));
+    armR = new THREE.Mesh(new THREE.BoxGeometry(4.5, 9, 4.5), materials.darkRed);
+    forearmR = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3, 9), materials.darkRed);
+    pipeR = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 6), materials.lightGray);
     pipeR.rotateZ(Math.PI / 4);
     armR.position.set(0, 1.5, -2.25);
     forearmR.position.set(0,-4.5,0);
@@ -258,15 +273,16 @@ function createRightArm(){
     rightArm.add(forearmR);
     rightArm.add(pipeR);
     scene.add(rightArm);
+
 }
 
 function createTow(){
     'use strict';
 
-    ret1 = new THREE.Mesh(new THREE.BoxGeometry(18, 19.5, 48), materials.white);
+    ret1 = new THREE.Mesh(new THREE.BoxGeometry(18, 19.5, 48), materials.gray);
     ret1.position.set(0,0,0);
 
-    ret2 = new THREE.Mesh(new THREE.BoxGeometry(18, 4.5, 33), materials.white);
+    ret2 = new THREE.Mesh(new THREE.BoxGeometry(18, 4.5, 33), materials.gray);
     ret2.position.set(0, -12, -7.5);
     
     wheel1 = createWheel(-10.5, -13.5, -14.25);
@@ -284,8 +300,7 @@ function createTow(){
     // tow.position.set() 
 
     scene.add(tow);
-
-    tow.position.set(0,5.25,-46.5);
+    tow.position.set(0,5.25,-66.5);
 
 }
 
@@ -294,15 +309,41 @@ function createTow(){
 //////////////////////
 function checkCollisions(){
     'use strict';
+    if(towAABBmin.x <= truckAABBmin.x && towAABBmax.x >= truckAABBmin.x && towAABBmax.z >= truckAABBmin.z && towAABBmin.z <= truckAABBmax.z){
+        return true;
+    }
+
+    if(towAABBmin.x <= truckAABBmax.x && towAABBmax.x > truckAABBmax.x && towAABBmax.z >= truckAABBmin.z && towAABBmin.z <= truckAABBmax.z){
+        return true;
+    }
+    /*
+    if(towAABBmax.z >= truckAABBmin.z && towAABBmin.x < truckAABBmin.x && towAABBmax.x <= truckAABBmin.x){
+        return true;
+    }*/
+
+    return false;
 
 }
 
-///////////////////////
+/////////////////////// 
 /* HANDLE COLLISIONS */
 ///////////////////////
-function handleCollisions(){
+function handleCollisions(){    
     'use strict';
 
+    animating = true;
+}
+
+function animationStep(animMov, remainingDistance){   
+    if(animMov.length() >= remainingDistance.length()){
+        tow.position.copy(towPos);
+    } else {
+        tow.position.add(animMov);
+    }
+    
+    if(tow.position.x == towPos.x && tow.position.z == towPos.z){
+        inPlace = true;
+    }
 }
 
 ////////////
@@ -310,39 +351,82 @@ function handleCollisions(){
 ////////////
 function update(){ 
     'use strict';
-    if (keys[38]) {
-      // Mover 'tow' para cima
-        tow.position.z -= movementSpeed;
+    let delta = clock.getDelta();
+    let towDelta = new THREE.Vector3();
+    let dV = new THREE.Vector3();
+    let dAux = new THREE.Vector3();
+
+    if (keys[38] && !animating) {
+      // Moves the 'tow' up
+        towDelta.z -= 1;
+        isCollidingThisFrame = checkCollisions();
     }
-    if (keys[40]) {
-      // Mover 'tow' para baixo
-        tow.position.z += movementSpeed;
+    if (keys[40] && !animating) {
+      // Moves the 'tow' downwards
+        towDelta.z += 1;
+        isCollidingThisFrame = checkCollisions();
     }
-    if (keys[37]) {
-      // Mover 'tow' para a esquerda
-        tow.position.x -= movementSpeed;
+    if (keys[37] && !animating) {
+      // Moves the 'tow' to the left
+        towDelta.x -= 1;
+        isCollidingThisFrame = checkCollisions();
     }
-    if (keys[39]) {
-      // Mover 'tow' para a direita
-        tow.position.x += movementSpeed;
+    if (keys[39] && !animating) {
+      // Moves the 'tow' to the right
+        towDelta.x += 1;
+        isCollidingThisFrame = checkCollisions();
     }
-    if (keys[70]) {
-        head.rotation.x -= rotationSpeed;
+
+    let movement = towDelta.normalize().multiplyScalar(movementSpeed * delta);
+    tow.position.add(movement);
+    towAABBmax.add(movement);
+    towAABBmin.add(movement);
+
+    if(isCollidingThisFrame && !wasCollidingLastFrame && isTruck){
+        handleCollisions();
     }
-    if (keys[82]) {
-        head.rotation.x += rotationSpeed;
+
+    if(!isCollidingThisFrame && wasCollidingLastFrame){
+        wasCollidingLastFrame = false;
     }
+
+    if(animating){
+        dV.x = (towPos.x - tow.position.x);
+        dV.z = (towPos.z - tow.position.z);
+        dAux.copy(dV);
+        animationStep(dV.normalize().multiplyScalar(movementSpeed*delta), dAux);
+    }
+
+    if(inPlace){
+        wasCollidingLastFrame = true;
+        animating = false;
+        // SET towAABB to place after animation
+        towAABBmax.x = 12;
+        towAABBmax.y = 15;
+        towAABBmax.z = -22.5;
+        towAABBmin.x = -12;
+        towAABBmin.y = -12;
+        towAABBmin.z = -74.25;
+        inPlace = false;
+    }
+
+    if (keys[70] && !animating) {
+        head.rotation.x -= rotationSpeed * delta;
+    }
+    if (keys[82] && !animating) {
+        head.rotation.x += rotationSpeed * delta;
+    }    
     if (head.rotation.x > maxHeadRotationAngle){
         head.rotation.x = maxHeadRotationAngle;
     }
     if (head.rotation.x < minHeadRotationAngle){
         head.rotation.x = minHeadRotationAngle;
     }
-    if (keys[87]) {
-        legs.rotation.x += rotationSpeed;
+    if (keys[87] && !animating) {
+        legs.rotation.x += rotationSpeed * delta;
     }
-    if (keys[83]) {
-        legs.rotation.x -= rotationSpeed;
+    if (keys[83] && !animating) {
+        legs.rotation.x -= rotationSpeed * delta;
     }
     if (legs.rotation.x > maxLowerRotationAngle){
         legs.rotation.x = maxLowerRotationAngle;
@@ -350,11 +434,11 @@ function update(){
     if (legs.rotation.x < minLowerRotationAngle){
         legs.rotation.x = minLowerRotationAngle;
     }
-    if (keys[81]) {
-        feet.rotation.x += rotationSpeed;
+    if (keys[81] && !animating) {
+        feet.rotation.x += rotationSpeed * delta;
     }
-    if (keys[65]) {
-        feet.rotation.x -= rotationSpeed;
+    if (keys[65] && !animating) {
+        feet.rotation.x -= rotationSpeed * delta;
     }
     if (feet.rotation.x > maxLowerRotationAngle){
         feet.rotation.x = maxLowerRotationAngle;
@@ -362,13 +446,13 @@ function update(){
     if (feet.rotation.x < minLowerRotationAngle){
         feet.rotation.x = minLowerRotationAngle;
     }
-    if (keys[68]) {
-        leftArm.position.x += movementSpeed;
-        rightArm.position.x -= movementSpeed;
+    if (keys[68] && !animating) {
+        leftArm.position.x += movementSpeed * delta;
+        rightArm.position.x -= movementSpeed * delta;
     }
-    if (keys[69]) {
-        leftArm.position.x -= movementSpeed;
-        rightArm.position.x += movementSpeed;
+    if (keys[69] && !animating) {
+        leftArm.position.x -= movementSpeed * delta;
+        rightArm.position.x += movementSpeed * delta;
     }
     if (leftArm.position.x >= maxLeftArmPosition){
         leftArm.position.x = maxLeftArmPosition;
@@ -380,10 +464,11 @@ function update(){
     }
     if (leftArm.position.x == minLeftArmPosition && rightArm.position.x == minRightArmPosition && head.rotation.x == maxHeadRotationAngle &&
         feet.rotation.x == maxLowerRotationAngle && legs.rotation.x == maxLowerRotationAngle){
-            isTruck = 1;
+            isTruck = true;
+            
         }
     else{
-        isTruck = 0;
+        isTruck = false;
     }
 }
 
@@ -408,7 +493,7 @@ function init() {
 
     createScene();
     createCameras();
-    currentCamera = cameraFront; // definir como default camera ativa a frontal
+    currentCamera = cameraFront; // Defines the front view camera as the active default camera
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -430,12 +515,19 @@ function animate() {
 ////////////////////////////
 function onResize() { 
     'use strict';
-
     renderer.setSize(window.innerWidth, window.innerHeight);
-
     if (window.innerHeight > 0 && window.innerWidth > 0) {
-        currentCamera.aspect = window.innerWidth / window.innerHeight;
-        currentCamera.updateProjectionMatrix();
+        if (currentCamera == cameraPerspective){
+            currentCamera.aspect = window.innerWidth / window.innerHeight;
+            currentCamera.updateProjectionMatrix();
+        }
+        else{
+            currentCamera.left = -(window.innerWidth / window.innerHeight) * viewSize;
+            currentCamera.right = (window.innerWidth / window.innerHeight) * viewSize;
+            currentCamera.top = viewSize;
+            currentCamera.bottom = -viewSize;
+            currentCamera.updateProjectionMatrix();
+        }
     }
 }
 
@@ -445,23 +537,28 @@ function onResize() {
 function onKeyDown(e) {
     'use strict';
     switch(e.keyCode){
-        case 49: // Tecla 1 - Camera Frontal
+        case 49: // Key 1 - Front View Camera
             currentCamera = cameraFront;
+            onResize();
             break;
-            //currentCamera.updateProjectionMatrix(); // Atualize a matriz de projeção da câmera ativa
-        case 50: // Tecla 2 - Camera Lateral
+            // Atualize a matriz de projeção da câmera ativa
+        case 50: // Key 2 - Side Camera
             currentCamera = cameraSide;
+            onResize();
             break;
-        case 51: // Tecla 3 - Camera Topo
+        case 51: // Key 3 - Top View Camera
             currentCamera = cameraTop;
+            onResize();
             break;
-        case 52: // Tecla 4 - Camera isometrica - ortogonal
+        case 52: // Key 4 - Orthogonal Isometric Camera
             currentCamera = cameraOrthographic;
+            onResize();
             break;
-        case 53: // Tecla 5 - Camera isometrica - perspetiva
+        case 53: // Key 5 - Perspective Isometric Camera
             currentCamera = cameraPerspective;
+            onResize();
             break; 
-        case 54: // Tecla 6 - Toggle Wireframe manualmente dar toggle a wireframe de cada material
+        case 54: // Key 6 - Manually toggles each material's wireframe
             for (let i in materials){
                 materials[i].wireframe = !materials[i].wireframe;
             }
@@ -469,7 +566,6 @@ function onKeyDown(e) {
     }
     keys[e.keyCode] = 1;
 }
-
 
 
 ///////////////////////
